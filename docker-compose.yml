@@ -1,0 +1,64 @@
+
+version: '3.8'
+
+services:
+  # FastAPI application
+  app:
+    build:
+      context: .
+      dockerfile: ./app/Dockerfile
+    container_name: url-shortener-app
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URL=mongodb://mongo:27017
+      - DATABASE_NAME=url_shortener
+      - BASE_URL=http://localhost:8000
+      - ENVIRONMENT=production
+    volumes:
+      - ./app:/app
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    networks:
+      - url-shortener-network
+
+  # MongoDB database
+  mongo:
+    image: mongo:latest
+    container_name: url-shortener-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=url_shortener
+    restart: unless-stopped
+    networks:
+      - url-shortener-network
+    command: mongod --logpath=/dev/null # Disable logging to console
+
+  # MongoDB admin interface
+  mongo-express:
+    image: mongo-express:latest
+    container_name: url-shortener-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=password
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    networks:
+      - url-shortener-network
+
+networks:
+  url-shortener-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local

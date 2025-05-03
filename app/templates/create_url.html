@@ -22,8 +22,21 @@
             margin-top: 20px;
             display: none;
         }
+        .error-alert {
+            margin-top: 20px;
+            display: none;
+        }
         .copy-btn {
             cursor: pointer;
+        }
+        .debug-info {
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
         }
         .header {
             text-align: center;
@@ -44,9 +57,14 @@
                     <label for="originalUrl" class="form-label">Enter your URL</label>
                     <input type="url" class="form-control" id="originalUrl" 
                            placeholder="https://example.com/very/long/url" required>
+                    <div class="form-text">Enter a complete URL including http:// or https://</div>
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Shorten URL</button>
+                <button type="submit" class="btn btn-primary w-100" id="submitBtn">Shorten URL</button>
             </form>
+            
+            <div class="alert alert-danger error-alert" id="errorAlert" role="alert">
+                <strong>Error:</strong> <span id="errorMessage"></span>
+            </div>
             
             <div class="result-card card" id="resultCard">
                 <div class="card-body">
@@ -63,14 +81,63 @@
                     <a href="#" class="btn btn-sm btn-outline-primary" id="visitUrl">Visit URL</a>
                 </div>
             </div>
+            
+            <div class="debug-info" id="debugInfo">
+                <h6>Debug Information:</h6>
+                <pre id="debugContent"></pre>
+            </div>
         </div>
     </div>
 
     <script>
+        // Show debug info in development
+        const showDebug = false; // Set to false in production
+        
+        function logDebug(message, data) {
+            if (showDebug) {
+                console.log(message, data);
+                const debugInfo = document.getElementById('debugInfo');
+                const debugContent = document.getElementById('debugContent');
+                
+                let content = debugContent.textContent;
+                content += `\n[${new Date().toISOString()}] ${message}\n`;
+                if (data) {
+                    content += JSON.stringify(data, null, 2) + '\n';
+                }
+                
+                debugContent.textContent = content;
+                debugInfo.style.display = 'block';
+            }
+        }
+        
+        function showError(message) {
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            errorMessage.textContent = message;
+            errorAlert.style.display = 'block';
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                errorAlert.style.display = 'none';
+            }, 5000);
+        }
+        
         document.getElementById('shortenForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            const submitBtn = document.getElementById('submitBtn');
             const originalUrl = document.getElementById('originalUrl').value;
+            
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+            
+            // Hide previous results/errors
+            document.getElementById('resultCard').style.display = 'none';
+            document.getElementById('errorAlert').style.display = 'none';
+            
+            logDebug('Submitting URL', { originalUrl });
             
             try {
                 const response = await fetch(`/urls/create?original_url=${encodeURIComponent(originalUrl)}`, {
@@ -80,11 +147,23 @@
                     }
                 });
                 
-                if (!response.ok) {
-                    throw new Error('Failed to create short URL');
+                logDebug('Response status', { status: response.status });
+                
+                const responseText = await response.text();
+                logDebug('Response text', { text: responseText });
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    logDebug('Parsed JSON response', data);
+                } catch (parseError) {
+                    logDebug('Failed to parse JSON', { error: parseError.message });
+                    throw new Error('Invalid response from server');
                 }
                 
-                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to create short URL');
+                }
                 
                 // Display the result
                 document.getElementById('shortUrl').value = data.short_url;
@@ -93,7 +172,12 @@
                 document.getElementById('resultCard').style.display = 'block';
                 
             } catch (error) {
-                alert('Error: ' + error.message);
+                logDebug('Error occurred', { error: error.message });
+                showError(error.message);
+            } finally {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Shorten URL';
             }
         });
         
